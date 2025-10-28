@@ -20,7 +20,7 @@ namespace Tender_Tool_Logs_Lambda.Services
         }
 
         /// <summary>
-        /// Fetches all log events from the latest log stream for a given log group.
+        /// Fetches the latest log events from the latest log stream for a given log group.
         /// </summary>
         /// <param name="logGroupName">The full name of the CloudWatch Log Group.</param>
         /// <returns>A list of <see cref="OutputLogEvent"/> objects.</returns>
@@ -58,30 +58,38 @@ namespace Tender_Tool_Logs_Lambda.Services
 
             _logger.LogInformation("Found stream: {StreamName}, Last event: {LastEvent}", latestStream.LogStreamName, latestStream.LastEventTimestamp);
 
-            // 2. Get all log events from that specific stream
+            // 2. Get the *last* log events from that stream to avoid API Gateway's 29s timeout.
             var eventsRequest = new GetLogEventsRequest
             {
                 LogGroupName = logGroupName,
                 LogStreamName = latestStream.LogStreamName,
-                StartFromHead = true // Get all events from the beginning of this stream
+                StartFromHead = false, // Read from the TAIL (end) of the stream
+                Limit = 200            // Only fetch a max of 200 events
             };
 
             var allEvents = new List<OutputLogEvent>();
             string? nextToken = null;
 
-            // Loop to handle pagination (if the stream has more than 1MB of logs)
+            // This loop will now be very fast and likely only run once.
             do
             {
                 eventsRequest.NextToken = nextToken;
                 var eventsResponse = await _cwClient.GetLogEventsAsync(eventsRequest);
 
+                // When reading from the tail, events come in reverse chronological order.
+                // We add them to our list and will sort them at the end.
                 allEvents.AddRange(eventsResponse.Events);
-                nextToken = eventsResponse.NextForwardToken;
+
+                // Use NextBackwardToken when StartFromHead is false
+                nextToken = eventsResponse.NextBackwardToken;
 
             } while (!string.IsNullOrEmpty(nextToken));
 
             _logger.LogInformation("Retrieved {Count} log events from stream {StreamName}.", allEvents.Count, latestStream.LogStreamName);
-            return allEvents;
+
+            // Because we read from the end, we must sort the final list
+            // by timestamp to ensure the PDF is in the correct (chronological) order.
+            return allEvents.OrderBy(e => e.Timestamp).ToList();
         }
     }
 }
