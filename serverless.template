@@ -12,11 +12,17 @@
         "Runtime": "dotnet8",
         "CodeUri": "",
         "MemorySize": 512,
-        "Timeout": 30,
-        "Role": null,
-        "Policies": [
-          "AWSLambda_FullAccess"
-        ],
+        "Timeout": 240,
+        "Role": "arn:aws:iam::211635102441:role/TenderToolLogsLambdaRole",
+        "VpcConfig": {
+          "SubnetIds": [
+            "subnet-0f47b68400d516b1e",
+            "subnet-072a27234084339fc"
+          ],
+          "SecurityGroupIds": [
+            "sg-0dc0af4fcf50676e9"
+          ]
+        },
         "Events": {
           "ProxyResource": {
             "Type": "Api",
