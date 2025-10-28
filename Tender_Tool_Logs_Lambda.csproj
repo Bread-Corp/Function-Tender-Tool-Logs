@@ -25,6 +25,6 @@
     <PackageReference Include="QuestPDF" Version="2025.7.3" />
   </ItemGroup>
   <ItemGroup>
-    <Folder Include="Data\" />
+    <Folder Include="Interfaces\" />
   </ItemGroup>
 </Project>
