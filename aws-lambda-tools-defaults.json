@@ -10,5 +10,7 @@
   "configuration": "Release",
   "s3-prefix": "Tender_Tool_Logs_Lambda/",
   "template": "serverless.template",
-  "template-parameters": ""
+  "template-parameters": "",
+  "s3-bucket": "tender-tool-log-api-bucket",
+  "stack-name": "tender-tool-log-api-stack"
 }
