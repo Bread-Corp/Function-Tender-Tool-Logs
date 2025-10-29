@@ -10,6 +10,7 @@ using Microsoft.Extensions.Hosting;
 using Tender_Tool_Logs_Lambda.Data;
 using Tender_Tool_Logs_Lambda.Interfaces;
 using Tender_Tool_Logs_Lambda.Services;
+using QuestPDF.Infrastructure;
 
 namespace Tender_Tool_Logs_Lambda;
 
@@ -26,6 +27,9 @@ public class Startup
     public void ConfigureServices(IServiceCollection services)
     {
         services.AddControllers();
+
+        QuestPDF.Settings.License = LicenseType.Community;
+        QuestPDF.Settings.EnableCaching = false; // Prevents errors on read-only filesystem
 
         // 1. Register the Database Context
         // This reads the connection string from your appsettings.json

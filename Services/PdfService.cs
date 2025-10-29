@@ -11,13 +11,6 @@ namespace Tender_Tool_Logs_Lambda.Services
 {
     public class PdfService : IPdfService
     {
-        public PdfService()
-        {
-            // Set the QuestPDF license. 
-            // The Community license is free and sufficient for this project.
-            QuestPDF.Settings.License = LicenseType.Community;
-        }
-
         /// <summary>
         /// Generates a PDF document from a list of log events.
         /// </summary>
