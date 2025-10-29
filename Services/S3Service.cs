@@ -5,6 +5,7 @@ using Amazon.S3;
 using Amazon.S3.Model;
 using Microsoft.Extensions.Logging;
 using Tender_Tool_Logs_Lambda.Interfaces;
+using System.Net;
 
 namespace Tender_Tool_Logs_Lambda.Services
 {
