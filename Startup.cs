@@ -11,6 +11,8 @@ using Tender_Tool_Logs_Lambda.Data;
 using Tender_Tool_Logs_Lambda.Interfaces;
 using Tender_Tool_Logs_Lambda.Services;
 using System.IO;
+using Microsoft.Extensions.Logging;
+using System.Text.Json;
 
 namespace Tender_Tool_Logs_Lambda;
 
@@ -26,6 +28,27 @@ public class Startup
     // This method gets called by the runtime. Use this method to add services to the container
     public void ConfigureServices(IServiceCollection services)
     {
+        services.AddLogging(builder =>
+        {
+            // Clear any default plain-text loggers
+            builder.ClearProviders();
+
+            // Add the JSON console logger
+            builder.AddJsonConsole(options =>
+            {
+                options.IncludeScopes = false;
+                options.TimestampFormat = "yyyy-MM-dd HH:mm:ss.fffZ";
+                options.JsonWriterOptions = new System.Text.Json.JsonWriterOptions
+                {
+                    Indented = false // Compact logs for CloudWatch
+                };
+            });
+
+            // This is important: it re-adds the ability to read log levels 
+            // from your appsettings.json (e.g., "Default": "Information")
+            builder.AddConfiguration(Configuration.GetSection("Logging"));
+        });
+
         services.AddControllers();
 
         // 1. Register the Database Context
