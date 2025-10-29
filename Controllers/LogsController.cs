@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Text;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
@@ -10,12 +11,13 @@ namespace Tender_Tool_Logs_Lambda.Controllers
 {
     [ApiController]
     [Route("api/logs")]
-    public class LogsController : Controller
+    public class LogsController : ControllerBase
     {
         private readonly IAuthService _authService;
         private readonly ILogMapperService _logMapperService;
         private readonly ICloudWatchService _cloudWatchService;
-        private readonly IPdfService _pdfService;
+        // --- CHANGE 1: Replace IPdfService ---
+        private readonly ILogFormatterService _logFormatterService;
         private readonly IS3Service _s3Service;
         private readonly ILogger<LogsController> _logger;
         private readonly string _s3BucketName;
@@ -24,7 +26,7 @@ namespace Tender_Tool_Logs_Lambda.Controllers
             IAuthService authService,
             ILogMapperService logMapperService,
             ICloudWatchService cloudWatchService,
-            IPdfService pdfService,
+            ILogFormatterService logFormatterService,
             IS3Service s3Service,
             ILogger<LogsController> logger,
             IConfiguration configuration)
@@ -32,22 +34,20 @@ namespace Tender_Tool_Logs_Lambda.Controllers
             _authService = authService;
             _logMapperService = logMapperService;
             _cloudWatchService = cloudWatchService;
-            _pdfService = pdfService;
+            _logFormatterService = logFormatterService;
             _s3Service = s3Service;
             _logger = logger;
 
-            // Get the S3 bucket name from configuration (e.g., appsettings.json)
             _s3BucketName = configuration["S3_BUCKET_NAME"];
             if (string.IsNullOrEmpty(_s3BucketName))
             {
                 _logger.LogError("S3_BUCKET_NAME is not configured.");
-                // This will cause the service to fail fast if config is missing
                 throw new InvalidOperationException("S3 bucket name is not configured.");
             }
         }
 
         /// <summary>
-        /// Generates a PDF log report from CloudWatch and returns a secure S3 download link.
+        /// Generates a plain text log report from CloudWatch and returns a secure S3 download link.
         /// </summary>
         [HttpPost]
         public async Task<IActionResult> GenerateLogReport([FromBody] LogRequest request)
@@ -80,24 +80,27 @@ namespace Tender_Tool_Logs_Lambda.Controllers
                 var logEvents = await _cloudWatchService.GetLatestLogEventsAsync(logGroupName);
                 _logger.LogInformation("Retrieved {Count} log events.", logEvents.Count);
 
-                // 4. Generate the PDF
-                _logger.LogDebug("Step 4: Generating PDF report.");
-                string pdfTitle = $"Log Report: {request.FunctionName} ({request.Category})";
-                byte[] pdfBytes = _pdfService.GenerateLogPdf(pdfTitle, logEvents);
-                _logger.LogInformation("PDF report generated ({Bytes} bytes).", pdfBytes.Length);
+                // Format logs as text instead of generating PDF
+                _logger.LogDebug("Step 4: Formatting logs as text report.");
+                string logText = _logFormatterService.FormatLogsAsText(logEvents);
+                // Convert string to byte array for S3 upload
+                byte[] logBytes = Encoding.UTF8.GetBytes(logText);
+                _logger.LogInformation("Text report generated ({Bytes} bytes).", logBytes.Length);
 
-                // 5. Upload PDF to S3
-                _logger.LogDebug("Step 5: Uploading PDF to S3 bucket {BucketName}.", _s3BucketName);
-                string fileKey = $"log-reports/{request.FunctionName}-{DateTime.UtcNow:yyyyMMddHHmmssfff}.pdf";
+                // Upload text file to S3
+                _logger.LogDebug("Step 5: Uploading text report to S3 bucket {BucketName}.", _s3BucketName);
+                // Change file extension to .txt
+                string fileKey = $"log-reports/{request.FunctionName}-{DateTime.UtcNow:yyyyMMddHHmmssfff}.txt";
 
-                await _s3Service.UploadFileAsync(_s3BucketName, fileKey, pdfBytes, "application/pdf");
+                // Upload with text/plain content type
+                await _s3Service.UploadFileAsync(_s3BucketName, fileKey, logBytes, "text/plain");
                 _logger.LogInformation("Successfully uploaded to S3: {FileKey}", fileKey);
 
-                // 6. Get a pre-signed URL for the file
+                // 6. Get a pre-signed URL for the file (No change needed here)
                 _logger.LogDebug("Step 6: Generating pre-signed URL.");
                 string downloadUrl = await _s3Service.GetPreSignedUrlAsync(_s3BucketName, fileKey);
 
-                // 7. Return the successful response
+                // 7. Return the successful response (No change needed here)
                 _logger.LogInformation("Step 7: Returning successful response.");
                 var response = new LogResponse
                 {

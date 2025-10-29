@@ -89,7 +89,7 @@ namespace Tender_Tool_Logs_Lambda.Services
 
             // Because we read from the end, we must sort the final list
             // by timestamp to ensure the PDF is in the correct (chronological) order.
-            return allEvents.OrderBy(e => e.Timestamp).ToList();
+            return allEvents.OrderBy(e => e.Timestamp.GetValueOrDefault()).ToList();
         }
     }
 }
