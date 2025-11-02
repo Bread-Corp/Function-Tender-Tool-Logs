@@ -3,16 +3,17 @@ using Amazon.S3;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using System.IO;
+using System.Text.Json;
 using Tender_Tool_Logs_Lambda.Data;
 using Tender_Tool_Logs_Lambda.Interfaces;
 using Tender_Tool_Logs_Lambda.Services;
-using System.IO;
-using Microsoft.Extensions.Logging;
-using System.Text.Json;
 
 namespace Tender_Tool_Logs_Lambda;
 
@@ -49,6 +50,18 @@ public class Startup
             builder.AddConfiguration(Configuration.GetSection("Logging"));
         });
 
+        services.AddCors(options =>
+        {
+            // Use AddDefaultPolicy
+            options.AddDefaultPolicy(builder =>
+            {
+                builder
+                .WithOrigins("*")
+                .AllowAnyMethod()
+                .AllowAnyHeader();
+            });
+        });
+
         services.AddControllers();
 
         // 1. Register the Database Context
@@ -79,10 +92,9 @@ public class Startup
             app.UseDeveloperExceptionPage();
         }
 
-        // We'll keep this disabled for Lambda, as API Gateway handles HTTPS
-        // app.UseHttpsRedirection(); 
-
         app.UseRouting();
+
+        app.UseCors();
 
         app.UseAuthorization();
 

@@ -16,7 +16,6 @@ namespace Tender_Tool_Logs_Lambda.Controllers
         private readonly IAuthService _authService;
         private readonly ILogMapperService _logMapperService;
         private readonly ICloudWatchService _cloudWatchService;
-        // --- CHANGE 1: Replace IPdfService ---
         private readonly ILogFormatterService _logFormatterService;
         private readonly IS3Service _s3Service;
         private readonly ILogger<LogsController> _logger;
@@ -117,6 +116,17 @@ namespace Tender_Tool_Logs_Lambda.Controllers
                 _logger.LogError(ex, "An unhandled error occurred during log report generation for {Function}", request.FunctionName);
                 return StatusCode(500, new { Message = "An internal server error occurred. Please check the logs." });
             }
+        }
+
+        /// <summary>
+        /// This explicitly handles the browser's preflight OPTIONS request.
+        /// The app.UseCors() middleware will intercept this and
+        /// add the correct headers to the response.
+        /// </summary>
+        [HttpOptions]
+        public IActionResult HandleOptions()
+        {
+            return Ok();
         }
     }
 }

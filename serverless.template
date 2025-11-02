@@ -37,6 +37,20 @@
               "Path": "/",
               "Method": "ANY"
             }
+          },
+          "OptionsProxyResource": {
+            "Type": "Api",
+            "Properties": {
+              "Path": "/{proxy+}",
+              "Method": "OPTIONS"
+            }
+          },
+          "OptionsRootResource": {
+            "Type": "Api",
+            "Properties": {
+              "Path": "/",
+              "Method": "OPTIONS"
+            }
           }
         }
       }
