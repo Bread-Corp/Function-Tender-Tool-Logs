@@ -374,26 +374,433 @@ Follow these steps to set up the project for local development.
    dotnet run
    ```
 
-## 📦 Deployment Guide
+## 📦 Deployment
 
-This project is deployed as an AWS Serverless Application using the `serverless.template` file and the AWS publish wizard in Visual Studio.
+This ASP.NET Core Lambda function can be deployed using three different methods. Choose the one that best fits your workflow and requirements.
 
-**Critical Deployment Prerequisites:**
+### Prerequisites
 
-1. **VPC:** The Lambda *must* be deployed into the same VPC as the RDS database.
-2. **Subnets:** The Lambda *must* be associated with **private subnets** (e.g., `subnet-0f47b...`, `subnet-072a...`).
-3. **NAT Gateway:** A NAT Gateway must be created and placed in a **public subnet**.
-4. **Route Table:** A **private route table** must be created, associated with the Lambda's subnets, and have a `0.0.0.0/0` route pointing to the NAT Gateway.
+Before deploying, ensure you have:
 
-Once the networking is in place, you can deploy from Visual Studio:
+- .NET 8 SDK installed
+- AWS CLI configured with appropriate credentials
+- SQL Server RDS instance running and accessible from VPC
+- Private S3 bucket for log reports (`tender-tool-log-reports-super-user`)
+- VPC configured with NAT Gateway and appropriate subnets/security groups
+- IAM role `TenderToolLogsLambdaRole` with required permissions
 
-1. Right-click the project `Tender_Tool_Logs_Lambda`.
-2. Select **"Publish AWS Serverless Application..."**.
-3. Enter a new **Stack Name** (e.g., `tender-tool-log-api-stack`).
-4. Select an S3 bucket for deployment.
-5. Click **Publish**.
+---
 
-The `serverless.template` file will automatically configure the Lambda's VPC, subnets, and IAM role.
+### Method 1: AWS Toolkit Deployment
+
+Deploy directly from your IDE using the AWS Toolkit extension.
+
+#### For Visual Studio 2022:
+
+1. **Install AWS Toolkit:**
+   - Install the AWS Toolkit for Visual Studio from the Visual Studio Marketplace
+
+2. **Configure AWS Credentials:**
+   - Ensure your AWS credentials are configured in Visual Studio
+   - Go to View → AWS Explorer and configure your profile
+
+3. **Deploy the Function:**
+   - Right-click on the `Tender_Tool_Logs_Lambda.csproj` project
+   - Select "Publish to AWS Lambda..."
+   - Choose "ASP.NET Core Web API" as the function blueprint
+   - Configure the deployment settings:
+     - **Function Name**: `TenderToolLogsLambda`
+     - **Runtime**: `.NET 8`
+     - **Memory**: `512 MB`
+     - **Timeout**: `240 seconds` (4 minutes)
+     - **Handler**: `Tender_Tool_Logs_Lambda::Tender_Tool_Logs_Lambda.LambdaEntryPoint::FunctionHandlerAsync`
+     - **IAM Role**: `arn:aws:iam::211635102441:role/TenderToolLogsLambdaRole`
+
+4. **Configure VPC Settings:**
+   - **VPC**: Select your VPC
+   - **Subnets**: `subnet-0f47b68400d516b1e`, `subnet-072a27234084339fc` (private subnets)
+   - **Security Groups**: `sg-0dc0af4fcf50676e9`
+
+5. **Configure API Gateway:**
+   - The function will automatically create an API Gateway with `/{proxy+}` and `/` routes
+   - Note the generated API Gateway URL for testing
+
+#### For VS Code:
+
+1. **Install AWS Toolkit:**
+   - Install the AWS Toolkit extension for VS Code
+
+2. **Open Command Palette:**
+   - Press `Ctrl+Shift+P` (Windows/Linux) or `Cmd+Shift+P` (Mac)
+   - Type "AWS: Deploy SAM Application"
+
+3. **Follow the deployment wizard** to configure and deploy your function
+
+---
+
+### Method 2: SAM Deployment
+
+Deploy using AWS SAM CLI with the provided serverless template.
+
+#### Step 1: Install SAM CLI
+
+```bash
+# For Windows (using Chocolatey)
+choco install aws-sam-cli
+
+# For macOS (using Homebrew)
+brew install aws-sam-cli
+
+# For Linux (using pip)
+pip install aws-sam-cli
+```
+
+#### Step 2: Install Lambda Tools
+
+```bash
+dotnet tool install -g Amazon.Lambda.Tools
+```
+
+#### Step 3: Configure Application Settings
+
+Ensure your `appsettings.json` has the correct configuration:
+
+```json
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  },
+  "ConnectionStrings": {
+    "DefaultConnection": "Server=your-rds-endpoint,1433;Database=tendertool_db;User Id=admin;Password=YOUR_PASSWORD;Encrypt=True;TrustServerCertificate=True"
+  },
+  "S3_BUCKET_NAME": "tender-tool-log-reports-super-user"
+}
+```
+
+#### Step 4: Build and Deploy
+
+```bash
+# Build the project
+dotnet restore
+dotnet build -c Release
+
+# Package the Lambda function (ASP.NET Core style)
+dotnet lambda package -c Release -o ./lambda-package.zip Tender_Tool_Logs_Lambda.csproj
+
+# Deploy using SAM with guided setup
+sam deploy --template-file serverless.template \
+           --stack-name tender-tool-log-api-stack \
+           --capabilities CAPABILITY_IAM \
+           --guided
+```
+
+#### Alternative: Direct SAM Deploy
+
+For subsequent deployments after initial setup:
+
+```bash
+sam deploy --template-file serverless.template \
+           --stack-name tender-tool-log-api-stack \
+           --capabilities CAPABILITY_IAM \
+           --parameter-overrides \
+             DatabaseConnectionString="Server=your-rds-endpoint,1433;Database=tendertool_db;User Id=admin;Password=YOUR_PASSWORD;Encrypt=True;TrustServerCertificate=True" \
+             S3BucketName="tender-tool-log-reports-super-user"
+```
+
+#### Important: Pre-existing IAM Role
+
+The serverless template references a pre-existing IAM role:
+```
+"Role": "arn:aws:iam::211635102441:role/TenderToolLogsLambdaRole"
+```
+
+Ensure this role exists with the required permissions before deployment. If the role doesn't exist, create it with the following permissions:
+
+- CloudWatch Logs access (self)
+- VPC access permissions
+- CloudWatch Logs read access (target functions)
+- S3 bucket access for log reports
+
+---
+
+### Method 3: Workflow Deployment (GitHub Actions)
+
+Deploy automatically using GitHub Actions when pushing to the release branch.
+
+#### Step 1: Set Up Repository Secrets
+
+In your GitHub repository, go to Settings → Secrets and variables → Actions, and add:
+
+```
+AWS_ACCESS_KEY_ID: your-aws-access-key-id
+AWS_SECRET_ACCESS_KEY: your-aws-secret-access-key
+AWS_REGION: us-east-1
+```
+
+#### Step 2: Deploy via Release Branch
+
+```bash
+# Create and switch to release branch
+git checkout -b release
+
+# Make your changes and commit
+git add .
+git commit -m "Deploy Tender Tool Logs Lambda updates"
+
+# Push to trigger deployment
+git push origin release
+```
+
+#### Step 3: Monitor Deployment
+
+1. Go to your repository's **Actions** tab
+2. Monitor the "Deploy .NET Lambda to AWS" workflow
+3. Check the deployment logs for any issues
+
+#### Manual Trigger
+
+You can also trigger the deployment manually:
+
+1. Go to the **Actions** tab in your repository
+2. Select "Deploy .NET Lambda to AWS"
+3. Click "Run workflow"
+4. Select the branch and click "Run workflow"
+
+---
+
+### Post-Deployment Verification
+
+After deploying using any method, verify the deployment:
+
+#### 1. Check Lambda Function
+
+```bash
+# Verify function exists and configuration
+aws lambda get-function --function-name tender-tool-log-api-stack-AspNetCoreFunction-fLHMagDT2qjX
+
+# Check environment variables and VPC configuration
+aws lambda get-function-configuration --function-name tender-tool-log-api-stack-AspNetCoreFunction-fLHMagDT2qjX
+```
+
+#### 2. Test API Gateway Endpoint
+
+```bash
+# Get the API Gateway URL from CloudFormation outputs
+aws cloudformation describe-stacks --stack-name tender-tool-log-api-stack --query 'Stacks[0].Outputs'
+
+# Test the health check endpoint
+curl -X GET https://your-api-gateway-url.execute-api.us-east-1.amazonaws.com/Prod/
+
+# Test the logs endpoint (requires valid super-user credentials)
+curl -X POST https://your-api-gateway-url.execute-api.us-east-1.amazonaws.com/Prod/api/logs \
+  -H "Content-Type: application/json" \
+  -d '{
+    "category": "scrapers",
+    "functionName": "SarsLambda",
+    "userId": "valid-super-user-id"
+  }'
+```
+
+#### 3. Verify Database and S3 Connectivity
+
+```bash
+# Check CloudWatch logs for any connection issues
+aws logs describe-log-groups --log-group-name-prefix "/aws/lambda/tender-tool-log-api-stack"
+
+# View recent logs
+aws logs tail "/aws/lambda/tender-tool-log-api-stack-AspNetCoreFunction" --follow
+
+# Verify S3 bucket exists
+aws s3 ls s3://tender-tool-log-reports-super-user/
+```
+
+---
+
+### Environment Variables Setup
+
+The function uses `appsettings.json` for configuration. Ensure this file contains:
+
+```json
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  },
+  "ConnectionStrings": {
+    "DefaultConnection": "Server=your-rds-endpoint,1433;Database=tendertool_db;User Id=admin;Password=YOUR_PASSWORD;Encrypt=True;TrustServerCertificate=True"
+  },
+  "S3_BUCKET_NAME": "tender-tool-log-reports-super-user"
+}
+```
+
+> **Security Note**: For production deployments, store the database connection string in AWS Secrets Manager and reference it in the Lambda function instead of using plain text.
+
+---
+
+### Critical VPC and Networking Configuration
+
+This Lambda function requires specific VPC configuration to access RDS, CloudWatch, and S3:
+
+#### VPC Requirements:
+- **Subnets**: Must be in private subnets: `subnet-0f47b68400d516b1e`, `subnet-072a27234084339fc`
+- **NAT Gateway**: Required for accessing public AWS APIs (CloudWatch, S3)
+- **Security Groups**: Must allow outbound traffic to RDS and internet
+
+#### Security Group Configuration:
+
+**For Lambda Security Group (sg-0dc0af4fcf50676e9):**
+```
+Outbound Rules:
+- Type: MS SQL, Port: 1433, Destination: RDS Security Group
+- Type: HTTPS, Port: 443, Destination: 0.0.0.0/0 (for AWS APIs via NAT)
+- Type: All Traffic, Port: All, Destination: 0.0.0.0/0 (for API Gateway integration)
+```
+
+**For RDS Security Group:**
+```
+Inbound Rules:
+- Type: MS SQL, Port: 1433, Source: Lambda Security Group (sg-0dc0af4fcf50676e9)
+```
+
+#### Route Table Configuration:
+
+**Private Route Table (for Lambda subnets):**
+```
+Routes:
+- Destination: 10.0.0.0/16, Target: Local (VPC CIDR)
+- Destination: 0.0.0.0/0, Target: NAT Gateway ID
+```
+
+---
+
+### IAM Role Configuration
+
+The Lambda uses a pre-existing IAM role. Ensure the `TenderToolLogsLambdaRole` has the following permissions:
+
+#### Required Policies:
+
+1. **CloudWatch Logs (Self):**
+```json
+{
+  "Effect": "Allow",
+  "Action": [
+    "logs:CreateLogGroup",
+    "logs:CreateLogStream",
+    "logs:PutLogEvents"
+  ],
+  "Resource": "arn:aws:logs:*:*:*"
+}
+```
+
+2. **VPC Access:**
+```json
+{
+  "Effect": "Allow",
+  "Action": [
+    "ec2:CreateNetworkInterface",
+    "ec2:DescribeNetworkInterfaces",
+    "ec2:DeleteNetworkInterface"
+  ],
+  "Resource": "*"
+}
+```
+
+3. **CloudWatch Logs (Target Functions):**
+```json
+{
+  "Effect": "Allow",
+  "Action": [
+    "logs:DescribeLogStreams",
+    "logs:GetLogEvents"
+  ],
+  "Resource": [
+    "arn:aws:logs:us-east-1:211635102441:log-group:/aws/lambda/*"
+  ]
+}
+```
+
+4. **S3 Access:**
+```json
+{
+  "Effect": "Allow",
+  "Action": [
+    "s3:PutObject",
+    "s3:GetObject"
+  ],
+  "Resource": "arn:aws:s3:::tender-tool-log-reports-super-user/*"
+}
+```
+
+---
+
+### API Testing and Usage
+
+After successful deployment, test the API endpoints:
+
+#### Health Check:
+```bash
+curl -X GET https://your-api-gateway-url.execute-api.us-east-1.amazonaws.com/Prod/
+# Expected: "Welcome to the Tender Tool Logging Lambda"
+```
+
+#### Log Report Generation:
+```bash
+curl -X POST https://your-api-gateway-url.execute-api.us-east-1.amazonaws.com/Prod/api/logs \
+  -H "Content-Type: application/json" \
+  -d '{
+    "category": "scrapers",
+    "functionName": "SarsLambda",
+    "userId": "B84EA17E-F718-43AC-84D4-7FC7155C6151"
+  }'
+```
+
+#### Expected Response:
+```json
+{
+  "fileName": "log-reports/SarsLambda-20251104172407.html",
+  "downloadUrl": "https://tender-tool-log-reports-super-user.s3.us-east-1.amazonaws.com/..."
+}
+```
+
+---
+
+### Troubleshooting Deployment Issues
+
+**Database Connection Errors:**
+- Verify Lambda is in the same VPC as RDS instance
+- Check security group rules allow Lambda to reach RDS on port 1433
+- Verify connection string format and credentials
+- Ensure RDS instance is running and accessible
+
+**CloudWatch API Rate Limiting:**
+- Function is configured to fetch only 200 most recent log events
+- If rate limiting persists, check for multiple concurrent requests
+- Review CloudWatch service quotas in AWS console
+
+**S3 Upload Failures:**
+- Verify S3 bucket `tender-tool-log-reports-super-user` exists
+- Check IAM permissions for S3 PutObject and GetObject
+- Ensure bucket is in the same region as Lambda
+
+**NAT Gateway Issues:**
+- Verify NAT Gateway is in a public subnet
+- Check route table configuration for private subnets
+- Ensure NAT Gateway has an Elastic IP assigned
+
+**API Gateway Timeouts:**
+- Function timeout is set to 240 seconds (4 minutes)
+- API Gateway has a hard limit of 29 seconds for HTTP APIs
+- Monitor CloudWatch logs for execution duration
+
+**Authentication Errors:**
+- Verify user exists in RDS database with `IsSuperUser = true`
+- Check database connection from Lambda
+- Ensure correct userId format in API requests
 
 ## 🧰 Troubleshooting & Team Gotchas
 
